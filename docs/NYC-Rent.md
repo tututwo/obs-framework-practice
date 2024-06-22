@@ -7,14 +7,31 @@ title: NYT Rent dashboard # toc: false
 
 ```js
 import * as topojson from "npm:topojson-client";
-const mapTopoJSON = await FileAttachment("data/merged_borders-topo.json")
+const mapTopoJSON = FileAttachment("data/merged_borders-topo.json")
   .json()
   .then((border) => {
-    return topojson.feature(border, border.objects[Object.keys(border.objects)[0]])
+    return topojson.feature(
+      border,
+      border.objects[Object.keys(border.objects)[0]]
+    );
   });
+
+const meta = FileAttachment("data/meta.json").json();
 ```
 
 ```js
+const selectedMetric = Inputs.select(
+  Object.keys(meta["areaLastMonth"]["Astoria"]),
+  { value: "changeRentTrend", label: "Selected Rent Metric" }
+);
+
+const selectedMetricValue = Generators.input(selectedMetric);
+```
+
+<!-- https://github.com/CartoDB/basemap-styles?tab=readme-ov-file -->
+
+```js
+import { tile as d3Tile } from "npm:d3-tile";
 const map = (width, height) => {
   const svg = d3
     .create("svg")
@@ -25,17 +42,96 @@ const map = (width, height) => {
 
   const projection = d3.geoMercator().fitSize([width, height], mapTopoJSON);
   const path = d3.geoPath().projection(projection);
+
+  // Basemap
+  const tile = d3Tile()
+    .size([width, height])
+    .scale(projection.scale() * 2 * Math.PI)
+    .translate(projection([0, 0]));
+
+  const tiles = tile();
+  svg
+    .append("g")
+    .attr("class", "tiles")
+    .selectAll("image")
+    .data(tiles)
+    .enter()
+    .append("image")
+    .attr(
+      "xlink:href",
+      (d) =>
+        `https://cartodb-basemaps-a.global.ssl.fastly.net/light_nolabels/${d[2]}/${d[0]}/${d[1]}.png`
+    )
+    .attr("x", (d) => (d[0] + tiles.translate[0]) * tiles.scale)
+    .attr("y", (d) => (d[1] + tiles.translate[1]) * tiles.scale)
+    .attr("width", tiles.scale)
+    .attr("height", tiles.scale);
+
+  // Overlay SVG choropleth
   svg
     .selectAll("path")
     .data(mapTopoJSON.features)
     .join("path")
     .attr("class", "vector")
     .attr("d", path)
-    .style("fill", "steelblue") // Apply styles to make the paths visible
+    .style("fill", (d) => {
+      let value =
+        meta["areaLastMonth"][d.properties["Neighborhood"]][
+          selectedMetricValue
+        ];
+      let color = value === null ? "transparent" : colorScale(value);
+      return color;
+    })
     .style("stroke", "white")
-    .style("stroke-width", 0.5);
+    .style("stroke-width", 3)
+      .on("mouseover", function (event, d) {
+      this.dispatchEvent(new CustomEvent("hoveredNeighborhood", { detail: d.properties["Neighborhood"], bubbles: true }));
+    })
+    .on("click", function (event, d) {
+      this.dispatchEvent(new CustomEvent("clickedNeighborhood", { detail: d.properties["Neighborhood"], bubbles: true }));
+    });
+
   return svg.node();
 };
+```
+
+```js
+// Reactively get the hovered neighborhood
+const hoveredNeighborhood = Generators.observe(notify => {
+  const updateHover = (event) => notify(event.detail);
+  document.addEventListener("hoveredNeighborhood", updateHover);
+  return () => document.removeEventListener("hoveredNeighborhood", updateHover);
+});
+
+// Reactively get the clicked neighborhood
+const clickedNeighborhood = Generators.observe(notify => {
+  const updateClick = (event) => notify(event.detail);
+  document.addEventListener("clickedNeighborhood", updateClick);
+  return () => document.removeEventListener("clickedNeighborhood", updateClick);
+});
+```
+
+```js
+console.log(hoveredNeighborhood);
+```
+
+```js
+// clickedNeighborhood;
+```
+
+```js
+const colorDomain = d3.extent(
+  Object.values(meta["areaLastMonth"])
+    .map((d) => d[selectedMetricValue])
+    .filter((tp) => tp !== null)
+);
+```
+
+```js
+const colorScale = d3
+  .scaleQuantile()
+  .domain(colorDomain)
+  .range(["#4CCEEE", "#5A8DE9", "#8D51CF", "#FB6192"]);
 ```
 
 <header>
@@ -80,7 +176,9 @@ const map = (width, height) => {
 <!--!-- -- -- -- -- -- --  Chart-- -- -- -- -- -- -- --  -->
 <section class='h-screen'>
 <!-- Input -->
-<div></div>
+<div>
+${selectedMetric}
+</div>
 
 <!-- Legend -->
 <div></div>

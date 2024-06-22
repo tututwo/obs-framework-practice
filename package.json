@@ -12,11 +12,12 @@
     "@observablehq/framework": "latest",
     "d3-dsv": "^3.0.1",
     "d3-fetch": "^3.0.1",
+    "d3-tile": "^1.0.0",
     "d3-time-format": "^4.1.0",
     "rough-viz": "^2.0.5"
   },
   "devDependencies": {
-    "rimraf": "^5.0.5"
+    "rimraf": "^5.0.7"
   },
   "engines": {
     "node": ">=18"
