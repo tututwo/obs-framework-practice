@@ -1,20 +1,28 @@
 # Primary mortgage market survey
 
 ```js
-const pmms = FileAttachment("data/pmms.csv").csv({typed: true});
+const pmms = FileAttachment("data/pmms.csv").csv({ typed: true });
 
-const tidy = pmms.then((pmms) => pmms.flatMap(({date, pmms30, pmms15}) => [{date, rate: pmms30, type: "30Y FRM"}, {date, rate: pmms15, type: "15Y FRM"}]));
+const tidy = pmms.then((pmms) =>
+  pmms.flatMap(({ date, pmms30, pmms15 }) => [
+    { date, rate: pmms30, type: "30Y FRM" },
+    { date, rate: pmms15, type: "15Y FRM" },
+  ])
+);
 ```
 
 ```js
-const color = Plot.scale({color: {domain: ["30Y FRM", "15Y FRM"]}});
-const colorLegend = (y) => html`<span style="border-bottom: solid 2px ${color.apply(`${y}Y FRM`)};">${y}-year fixed-rate</span>`;
+const color = Plot.scale({ color: { domain: ["30Y FRM", "15Y FRM"] } });
+const colorLegend = (y) =>
+  html`<span style="border-bottom: solid 2px ${color.apply(`${y}Y FRM`)};"
+    >${y}-year fixed-rate</span
+  >`;
 ```
 
 ```js
 const defaultStartEnd = [pmms.at(-53).date, pmms.at(-1).date];
 const startEnd = Mutable(defaultStartEnd);
-const setStartEnd = (se) => startEnd.value = (se ?? defaultStartEnd);
+const setStartEnd = (se) => (startEnd.value = se ?? defaultStartEnd);
 const getStartEnd = () => startEnd.value;
 ```
 
@@ -31,21 +39,29 @@ function frmCard(y, pmms) {
     <table>
       <tr>
         <td>1-week change</td>
-        <td align="right">${formatPercent(diff1, {signDisplay: "always"})}</td>
+        <td align="right">${formatPercent(diff1, {
+          signDisplay: "always",
+        })}</td>
         <td>${trend(diff1)}</td>
       </tr>
       <tr>
         <td>1-year change</td>
-        <td align="right">${formatPercent(diffY, {signDisplay: "always"})}</td>
+        <td align="right">${formatPercent(diffY, {
+          signDisplay: "always",
+        })}</td>
         <td>${trend(diffY)}</td>
       </tr>
       <tr>
         <td>4-week average</td>
-        <td align="right">${formatPercent(d3.mean(pmms.slice(-4), (d) => d[key]))}</td>
+        <td align="right">${formatPercent(
+          d3.mean(pmms.slice(-4), (d) => d[key])
+        )}</td>
       </tr>
       <tr>
         <td>52-week average</td>
-        <td align="right">${formatPercent(d3.mean(pmms.slice(-52), (d) => d[key]))}</td>
+        <td align="right">${formatPercent(
+          d3.mean(pmms.slice(-52), (d) => d[key])
+        )}</td>
       </tr>
     </table>
     ${resize((width) =>
@@ -53,7 +69,7 @@ function frmCard(y, pmms) {
         width,
         height: 40,
         axis: null,
-        x: {inset: 40},
+        x: { inset: 40 },
         marks: [
           Plot.tickX(pmms.slice(-52), {
             x: key,
@@ -61,12 +77,12 @@ function frmCard(y, pmms) {
             insetTop: 10,
             insetBottom: 10,
             title: (d) => `${d.date?.toLocaleDateString("en-us")}: ${d[key]}%`,
-            tip: {anchor: "bottom"}
+            tip: { anchor: "bottom" },
           }),
-          Plot.tickX(pmms.slice(-1), {x: key, strokeWidth: 2}),
-          Plot.text([`${range[0]}%`], {frameAnchor: "left"}),
-          Plot.text([`${range[1]}%`], {frameAnchor: "right"})
-        ]
+          Plot.tickX(pmms.slice(-1), { x: key, strokeWidth: 2 }),
+          Plot.text([`${range[0]}%`], { frameAnchor: "left" }),
+          Plot.text([`${range[1]}%`], { frameAnchor: "right" }),
+        ],
       })
     )}
     <span class="small muted">52-week range</span>
@@ -76,12 +92,18 @@ function frmCard(y, pmms) {
 function formatPercent(value, format) {
   return value == null
     ? "N/A"
-    : (value / 100).toLocaleString("en-US", {minimumFractionDigits: 2, style: "percent", ...format});
+    : (value / 100).toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        style: "percent",
+        ...format,
+      });
 }
 
 function trend(v) {
-  return v >= 0.005 ? html`<span class="green">↗︎</span>`
-    : v <= -0.005 ? html`<span class="red">↘︎</span>`
+  return v >= 0.005
+    ? html`<span class="green">↗︎</span>`
+    : v <= -0.005
+    ? html`<span class="red">↘︎</span>`
     : "→";
 }
 ```
@@ -107,6 +129,10 @@ Each week, [Freddie Mac](https://www.freddiemac.com/pmms/about-pmms.html) survey
 }
 
 </style>
+
+```js
+console.log(tidy.filter((d) => startEnd[0] <= d.date && d.date < startEnd[1]));
+```
 
 <div class="grid grid-cols-2-3" style="margin-top: 2rem;">
   <div class="card">${frmCard(30, pmms)}</div>

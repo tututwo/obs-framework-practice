@@ -6,129 +6,154 @@ title: Primary Morgage # toc: false
 <script src="https://cdn.tailwindcss.com"></script>
 
 ```js
+const color = d3
+  .scaleOrdinal()
+  .domain(["30Y FRM", "15Y FRM"])
+  .range(["#1f77b4", "#ff7f0e"]);
+```
+
+```js
 import { Mutable } from "npm:@observablehq/stdlib";
-let updatedXDomain = Mutable([
-    // "2017-02-01T16:29:02.813Z",
-    // "2024-06-13T00:00:00.000Z"
-]);
+const defaultStartEnd = [pmms.at(-53).date, pmms.at(-1).date];
+const startEnd = Mutable(defaultStartEnd);
+const setStartEnd = (se) => (startEnd.value = se ?? defaultStartEnd);
+const getStartEnd = () => startEnd.value;
 
 // const setXDomain = (v) => (updatedXDomain.value = v);
 ```
 
 ```js
-const chart = (width, height, brushable = false) => {
-  // Declare the chart dimensions and margins.
+function createLineChart(
+  data,
+  { width, height, margin = { top: 20, right: 30, bottom: 30, left: 40 } }
+) {
+  const svg = d3.create("svg").attr("width", width).attr("height", height);
 
-  const marginTop = 20;
-  const marginRight = 30;
-  const marginBottom = 30;
-  const marginLeft = 40;
-  const xKey = "date";
-  const yKey = "pmms30";
-  // Declare the x (horizontal position) scale.
-  let xDomain = brushable ? d3.extent(pmms, (d) => d[xKey]) : updatedXDomain;
-  console.log(updatedXDomain.value);
-  const x = d3.scaleUtc(xDomain, [marginLeft, width - marginRight]);
+  const x = d3
+    .scaleUtc()
+    .domain(d3.extent(data, (d) => d.date))
+    .range([margin.left, width - margin.right]);
 
-  // Declare the y (vertical position) scale.
-  const y = d3.scaleLinear(
-    [0, d3.max(pmms, (d) => d[yKey])],
-    [height - marginBottom, marginTop]
-  );
+  const y = d3
+    .scaleLinear()
+    .domain([0, d3.max(data, (d) => d.rate)])
+    .nice()
+    .range([height - margin.bottom, margin.top]);
 
-  // Declare the line generator.
   const line = d3
     .line()
-    .x((d) => x(d[xKey]))
-    .y((d) => y(d[yKey]));
+    .defined((d) => !isNaN(d.rate))
+    .x((d) => x(d.date))
+    .y((d) => y(d.rate));
 
-  // Create the SVG container.
-  const svg = d3
-    .create("svg")
-    .attr("width", width)
-    .attr("height", height)
-    .attr("viewBox", [0, 0, width, height])
-    .attr("style", "max-width: 100%; height: auto; height: intrinsic;");
-
-  // Add the x-axis.
   svg
     .append("g")
-    .attr("transform", `translate(0,${height - marginBottom})`)
-    .call(
-      d3
-        .axisBottom(x)
-        .ticks(width / 80)
-        .tickSizeOuter(0)
-    );
+    .attr("transform", `translate(0,${height - margin.bottom})`)
+    .call(d3.axisBottom(x));
 
-  // Add the y-axis, remove the domain line, add grid lines and a label.
   svg
     .append("g")
-    .attr("transform", `translate(${marginLeft},0)`)
-    .call(d3.axisLeft(y).ticks(height / 40))
-    .call((g) => g.select(".domain").remove())
-    .call((g) =>
-      g
-        .selectAll(".tick line")
-        .clone()
-        .attr("x2", width - marginLeft - marginRight)
-        .attr("stroke-opacity", 0.1)
-    )
-    .call((g) =>
-      g
-        .append("text")
-        .attr("x", -marginLeft)
-        .attr("y", 10)
-        .attr("fill", "currentColor")
-        .attr("text-anchor", "start")
-        .text("↑ Daily close ($)")
-    );
+    .attr("transform", `translate(${margin.left},0)`)
+    .call(d3.axisLeft(y).ticks(null, "%"));
 
-  // Append a path for the line.
-  svg
-    .append("path")
+  const types = d3.group(data, (d) => d.type);
+
+  const path = svg
+    .append("g")
     .attr("fill", "none")
-    .attr("stroke", "steelblue")
     .attr("stroke-width", 1.5)
-    .attr("d", line(pmms));
+    .attr("stroke-linejoin", "round")
+    .attr("stroke-linecap", "round")
+    .selectAll("path")
+    .data(types)
+    .join("path")
+    .attr("stroke", ([key]) => color(key))
+    .attr("d", ([, values]) => line(values));
 
-  // brush
-  if (brushable) {
-    const brush = d3
-      .brushX()
-      .extent([
-        [marginLeft, 0.5],
-        [width - marginRight, height - marginBottom + 0.5],
-      ])
-      .on("brush", brushed)
-      .on("end", brushended);
-    const defaultSelection = [
-      x(d3.utcYear.offset(x.domain()[1], -1)),
-      x.range()[1],
-    ];
-    // what is this for?
-    const gb = svg.append("g").call(brush).call(brush.move, defaultSelection);
+  function updateLineChart(data) {
+    x.domain(d3.extent(data, (d) => d.date));
+    svg
+      .selectAll("g.x-axis")
+      .transition()
+      .duration(750)
+      .call(d3.axisBottom(x));
+    
+    const types = d3.group(data, (d) => d.type);
+    path
+      .data(types)
+      .join("path")
+      .attr("stroke", ([key]) => color(key))
+      .transition()
+      .duration(750)
+      .attr("d", ([, values]) => line(values));
+  }
 
-    function brushed({ selection }) {
-      if (selection) {
-        svg.property("value", selection.map(x.invert, x).map(d3.utcDay.round));
+  return Object.assign(svg.node(), { update: updateLineChart });
+}
+```
 
-        //? what is input
-        svg.dispatch("input");
+```js
+function createBrushableChart(
+  data,
+  { width, height, margin = { top: 20, right: 30, bottom: 30, left: 40 } }
+) {
+  const svg = d3.create("svg").attr("width", width).attr("height", height);
 
-        setXDomain(selection.map(x.invert));
-      }
-    }
+  const x = d3
+    .scaleUtc()
+    .domain(d3.extent(data, (d) => d.date))
+    .range([margin.left, width - margin.right]);
 
-    function brushended({ selection }) {
-      if (!selection) {
-        gb.call(brush.move, defaultSelection);
-      }
-    }
+  const y = d3
+    .scaleLinear()
+    .domain([0, d3.max(data, (d) => d.rate)])
+    .nice()
+    .range([height - margin.bottom, margin.top]);
+
+  const line = d3
+    .line()
+    .defined((d) => !isNaN(d.rate))
+    .x((d) => x(d.date))
+    .y((d) => y(d.rate));
+
+  svg
+    .append("g")
+    .attr("transform", `translate(0,${height - margin.bottom})`)
+    .call(d3.axisBottom(x));
+
+  svg
+    .append("g")
+    .attr("transform", `translate(${margin.left},0)`)
+    .call(d3.axisLeft(y).ticks(null, "%"));
+
+  const types = d3.group(data, (d) => d.type);
+
+  svg
+    .append("g")
+    .attr("fill", "none")
+    .attr("stroke-width", 1.5)
+    .attr("stroke-linejoin", "round")
+    .attr("stroke-linecap", "round")
+    .selectAll("path")
+    .data(types)
+    .join("path")
+    .attr("stroke", ([key]) => color(key))
+    .attr("d", ([, values]) => line(values));
+
+  const brush = d3.brushX()
+    .extent([[margin.left, margin.top], [width - margin.right, height - margin.bottom]])
+    .on("brush", brushed);
+
+  svg.append("g").call(brush);
+
+  function brushed(event) {
+    if (!event.selection) return;
+    const [x0, x1] = event.selection.map(x.invert);
+    setStartEnd([x0, x1]);
   }
 
   return svg.node();
-};
+}
 ```
 
 ```js
@@ -143,86 +168,14 @@ const tidy = pmms.then((pmms) =>
 ```
 
 <!--! Big Step/Line Chart -->
-
-```js
-
-```
-
-<section class="grid grid-cols-3 grid-rows-4 gap-4">
-  <div class="card bg-white p-6 rounded-lg shadow-lg max-w-sm w-full">
-    <!-- Title and Rate -->
-    <div class="text-blue-500 text-lg font-semibold">30-year fixed-rate</div>
-    <div class="text-gray-900 text-5xl font-bold mt-1">7.22%</div>
-    <!-- Changes -->
-    <div class="mt-4">
-      <div class="flex justify-between text-sm text-gray-600">
-        <div>1-week change</div>
-        <div class="flex items-center">
-          <span class="text-green-500">+0.05%</span>
-          <svg
-            class="w-4 h-4 text-green-500 ml-1"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            ><path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M5 12l5-5L20 15"
-            ></path></svg>
-        </div>
-      </div>
-      <div class="flex justify-between text-sm text-gray-600 mt-1">
-        <div>1-year change</div>
-        <div class="flex items-center">
-          <span class="text-green-500">+0.83%</span>
-          <svg
-            class="w-4 h-4 text-green-500 ml-1"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            ><path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M5 12l5-5L20 15"
-            ></path></svg>
-        </div>
-      </div>
-    </div>
-  <!-- Averages -->
-    <div class="mt-4">
-      <div class="flex justify-between text-sm text-gray-600">
-        <div>4-week average</div>
-        <div class="text-gray-900">7.09%</div>
-      </div>
-      <div class="flex justify-between text-sm text-gray-600 mt-1">
-        <div>52-week average</div>
-        <div class="text-gray-900">6.97%</div>
-      </div>
-    </div>
-   <!-- Range Bar -->
-    <div class="mt-6">
-      <div class="text-gray-500 text-sm">52-week range</div>
-      <div class="relative mt-2">
-        <div class="h-1 bg-gray-300 relative flex justify-between">
-          <div class="bg-gray-700 h-full w-0.5" style="left: 20%;"></div>
-          <div class="bg-gray-700 h-full w-0.5" style="left: 40%;"></div>
-          <div class="bg-gray-700 h-full w-0.5" style="left: 60%;"></div>
-          <div class="bg-gray-700 h-full w-0.5" style="left: 80%;"></div>
-          <div class="bg-blue-500 h-full w-0.5 absolute left-2/3"></div>
-        </div>
-        <div class="absolute top-2 left-0 text-xs text-gray-600">6.35%</div>
-        <div class="absolute top-2 right-0 text-xs text-gray-600">7.79%</div>
-      </div>
-    </div>
+<section class="flex flex-col h-[100vh]">
+  <div class="card h-1/2">
+    ${resize((width, height) => {
+      const chart = createLineChart(tidy.filter(d => startEnd[0] <= d.date && d.date < startEnd[1]), {width, height});
+      return chart;
+    })}
   </div>
-
-  <div class="card col-start-1 row-start-2">2</div>
-  <div class="card col-span-3 row-span-3 col-start-1 row-start-3">${resize((width,height)=> {
-    return chart(width,height,true)
-  })}</div>
-  <div class="card col-span-2 row-span-2 col-start-2 row-start-1">${resize((width,height)=> {
-    return chart(width,height)
-  })}</div>
+  <div class="card h-1/2">
+    ${resize((width, height) => createBrushableChart(tidy, {width, height}))}
+  </div>
 </section>
