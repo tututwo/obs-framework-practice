@@ -39,17 +39,18 @@ const team = view(
     label: "Favorite team(via view):",
     value: "Metropolis Meteors",
   })
-);
+)
+```
+
+```js
 const teamMute = Mutable("");
 // team.addEventListener('input', () => {
 //   teamMute.value = team;
 // });
+
 ```
 
-
-
 My real team is ${team}
-
 
 ## Mutable Practice
 
@@ -73,4 +74,31 @@ console.log(count);
 ${numberMutator}
 ${count}
 
-## Validation
+## inline js expression
+
+```js
+const nameInput = html`<input id="nameInput" value="wtf">`;
+
+const name = Generators.observe((notify) => {
+  const inputted = () => notify(nameInput.value);
+  inputted();
+  nameInput.addEventListener("input", inputted);
+  return () => nameInput.removeEventListener("input", inputted);
+});
+
+```
+
+```js
+display(nameInput)
+
+```
+<h1>
+${name}
+</h1>
+
+```js
+{
+  name
+  console.log(name)
+}
+```

@@ -357,7 +357,7 @@ view(hoveredDate); // Trigger reactivity
       ${chart2}
     </div>
     <div class='h-full flex-1'>
-      ${chart3}
+    ${chart3}
     </div>
   </div>
   </section>

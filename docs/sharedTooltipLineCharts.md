@@ -7,28 +7,44 @@ toc: false
 <script src="https://cdn.tailwindcss.com"></script>
 
 ```js
-const data1 = FileAttachment("data/carroll-gardens.csv").csv({ typed: true });
-const data2 = FileAttachment("data/long-island-city.csv").csv({ typed: true });
+const data1 = FileAttachment("data/carroll-gardens.csv").csv({
+  typed: true,
+});
+const data2 = FileAttachment("data/long-island-city.csv").csv({
+  typed: true,
+});
 const data3 = FileAttachment("data/soho-little-italy-nolita.csv").csv({
   typed: true,
 });
 ```
 
 ```js
-const tooltipState = Mutable(null);
-const setTooltipState = (tooltip) => (tooltipState.value = tooltip);
-```
+const tooltipState = Mutable({
+  date: null,
+  x: null,
+});
 
-```js
 function createLineChart(
   data,
-  { width, height, margin = { top: 20, right: 30, bottom: 30, left: 40 } },
+  {
+    width,
+    height,
+    margin = {
+      top: 20,
+      right: 30,
+      bottom: 30,
+      left: 40,
+    },
+  },
   color,
   yLabel,
-  yMax,
-  updateTooltip
+  yMax
 ) {
-  const svg = d3.create("svg").attr("width", width).attr("height", height);
+  const svg = d3
+    .create("svg")
+    .attr("width", width)
+    .attr("height", height)
+    .attr("class", "line-chart");
 
   const x = d3
     .scaleUtc()
@@ -70,46 +86,90 @@ function createLineChart(
     .join("path")
     .attr("stroke", ([key]) => color(key))
     .attr("d", ([, values]) => line(values));
+  
 
-  const tooltip = svg.append("g").attr("display", "none");
 
-  tooltip.append("circle").attr("r", 4.5);
+  const overlay = svg.append("rect")
+    .attr("class", "overlay")
+    .attr("width", width)
+    .attr("height", height)
+    .attr("fill", "none")
+    .attr("pointer-events", "all");
 
-  tooltip.append("text").attr("text-anchor", "middle").attr("y", -10);
+  overlay
+    .on("mousemove", function(event) {
+      const [xm, ym] = d3.pointer(event, this);
+      const date = x.invert(xm);
+      tooltipState.value = { date, x: xm, y: ym };
 
-  svg.on("mousemove", function (event) {
-    const [xm] = d3.pointer(event);
-    const date = x.invert(xm);
-    setTooltipState({ date, x: xm });
-    updateTooltip(data, date, xm, y, tooltip);
-  });
-
+      console.log
+    })
+    .on("mouseleave", () => {
+      tooltipState.value = { date: null, x: null, y: null };
+    });
   return svg.node();
 }
 ```
 
 ```js
-function updateTooltip(data, date, xm, y, tooltip) {
-  const closestData = data.reduce((a, b) =>
-    Math.abs(b.date - date) < Math.abs(a.date - date) ? b : a
-  );
-  tooltip.attr("transform", `translate(${xm},${y(closestData.value)})`);
-  tooltip.select("text").text(closestData.value);
-  tooltip.attr("display", null);
+function updateAllTooltips(charts, data) {
+  const { date, x, y } = tooltipState;
+  if (!date) {
+    charts.forEach(chart => d3.select(chart).select("g[display]").attr("display", "none"));
+    return;
+  }
+
+  charts.forEach((chart, i) => {
+    const svg = d3.select(chart);
+    const width = +svg.attr("width");
+    const height = +svg.attr("height");
+    const margin = { top: 20, right: 30, bottom: 30, left: 40 };
+
+    const xScale = d3.scaleUtc()
+      .domain(d3.extent(data[i], d => d.date))
+      .range([margin.left, width - margin.right]);
+
+    const yScale = d3.scaleLinear()
+      .domain([0, d3.max(data[i], d => d.value)])
+      .nice()
+      .range([height - margin.bottom, margin.top]);
+
+    const bisect = d3.bisector(d => d.date).left;
+    const index = bisect(data[i], date);
+    const d = data[i][index];
+
+    if (d) {
+      const tooltip = svg.select("g[display]");
+      tooltip
+        .attr("transform", `translate(${xScale(d.date)},${yScale(d.value)})`)
+        .attr("display", null);
+      
+      tooltip.select("text").text(d.value.toFixed(2));
+    }
+  });
 }
 ```
 
 <section class="flex flex-col h-[1000px]">
-  <div class="card h-1/3">${resize((width, height) => {
-    const chart1 = createLineChart(data1, {width, height}, d3.scaleOrdinal().domain(["value1", "value2", "value3"]).range(["#1f77b4", "#ff7f0e", "#2ca02c"]), "Y Axis Label", d3.max(data1, d => d.value), updateTooltip);
-    return chart1;
-  })}</div>
-  <div class="card h-1/3">${resize((width, height) => {
-    const chart2 = createLineChart(data2, {width, height}, d3.scaleOrdinal().domain(["value1", "value2", "value3"]).range(["#1f77b4", "#ff7f0e", "#2ca02c"]), "Y Axis Label", d3.max(data2, d => d.value), updateTooltip);
-    return chart2;
-  })}</div>
-  <div class="card h-1/3">${resize((width, height) => {
-    const chart3 = createLineChart(data3, {width, height}, d3.scaleOrdinal().domain(["value1", "value2", "value3"]).range(["#1f77b4", "#ff7f0e", "#2ca02c"]), "Y Axis Label", d3.max(data3, d => d.value), updateTooltip);
-    return chart3;
-  })}</div>
+  <div class="card h-1/3">${resize((width, height) => createLineChart(data1, {width, height}, d3.scaleOrdinal().domain(["value1", "value2", "value3"]).range(["#1f77b4", "#ff7f0e", "#2ca02c"]), "Y Axis Label", d3.max(data1, d => d.value)))}</div>
+  <div class="card h-1/3">${resize((width, height) => createLineChart(data2, {width, height}, d3.scaleOrdinal().domain(["value1", "value2", "value3"]).range(["#1f77b4", "#ff7f0e", "#2ca02c"]), "Y Axis Label", d3.max(data2, d => d.value)))}</div>
+  <div class="card h-1/3">${resize((width, height) => createLineChart(data3, {width, height}, d3.scaleOrdinal().domain(["value1", "value2", "value3"]).range(["#1f77b4", "#ff7f0e", "#2ca02c"]), "Y Axis Label", d3.max(data3, d => d.value)))}</div>
 </section>
+
+```js
+const charts = d3.selectAll('.line-chart').nodes();
+  const allData = [data1, data2, data3];
+
+  // This function will be called whenever tooltipState changes
+  function update() {
+    updateAllTooltips(charts, allData);
+  }
+
+  // Use Observable's reactive capabilities
+  tooltipState.value;
+  update();
+
+
+  // Return a function that updates the tooltips
+  
+```
